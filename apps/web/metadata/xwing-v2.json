@@ -1,0 +1,22 @@
+{
+  "name": "XWing Mk I",
+  "description": "3D printed XWing test asset for XRPL trace demo. Updated metadata.",
+  "image": "https://example.com/xwing.png",
+  "attributes": [
+    { "trait_type": "serial", "value": "XW-0001" },
+    { "trait_type": "material", "value": "PLA" },
+    { "trait_type": "color", "value": "Graphite" },
+    { "trait_type": "qa_status", "value": "passed" },
+    { "trait_type": "facility_country", "value": "FR" },
+    { "trait_type": "created_at", "value": "2024-01-15" }
+  ],
+  "trace": {
+    "item_id": "xwing-0001",
+    "created_at": "2024-01-15",
+    "facility_country": "FR",
+    "print_job_id": "print-2024-01",
+    "machine_id": "mk-03",
+    "operator_id": "op-17",
+    "version": "v2"
+  }
+}

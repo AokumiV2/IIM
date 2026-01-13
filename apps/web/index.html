@@ -1,0 +1,244 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>XRPL XWing Trace Lab</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="styles.css" />
+    <script src="https://unpkg.com/xrpl@2.14.0/build/xrpl-latest-min.js"></script>
+  </head>
+  <body>
+    <div class="noise"></div>
+    <div class="app">
+      <header class="hero">
+        <div>
+          <p class="kicker">XRPL testnet demo</p>
+          <h1>XWing Trace Lab</h1>
+          <p class="subtitle">Mint NFTs, anchor trace events, and inspect your account on XRPL testnet.</p>
+          <div class="pill">Use disposable wallets only. Testnet only.</div>
+        </div>
+        <div class="hero-card">
+          <div class="status">
+            <span class="dot" id="status-dot"></span>
+            <span id="status-text">Disconnected</span>
+          </div>
+          <div class="stat-grid">
+            <div>
+              <div class="label">WebSocket</div>
+              <div class="mono" id="net-url">wss://s.altnet.rippletest.net:51233</div>
+            </div>
+            <div>
+              <div class="label">Ledger index</div>
+              <div class="mono" id="ledger-index">-</div>
+            </div>
+            <div>
+              <div class="label">Server build</div>
+              <div class="mono" id="server-build">-</div>
+            </div>
+          </div>
+          <div class="actions">
+            <button id="connect-btn">Connect</button>
+            <button class="ghost" id="disconnect-btn">Disconnect</button>
+          </div>
+        </div>
+      </header>
+
+      <main class="grid">
+        <section class="panel" style="--delay: 1">
+          <h2>Wallet</h2>
+          <div class="field">
+            <label for="wallet-seed">Seed (testnet only)</label>
+            <textarea id="wallet-seed" rows="3" placeholder="Paste a seed or generate a fresh wallet"></textarea>
+          </div>
+          <div class="actions">
+            <button id="generate-btn">Generate wallet</button>
+            <button class="ghost" id="load-btn">Load from seed</button>
+          </div>
+          <div class="kv">
+            <div class="label">Address</div>
+            <div class="mono" id="wallet-address">-</div>
+          </div>
+          <div class="actions">
+            <button id="faucet-btn">Fund from faucet</button>
+            <button class="ghost" id="balance-btn">Refresh balance</button>
+          </div>
+          <div class="balance" id="wallet-balance">0 XRP</div>
+          <div class="hint">Faucet needs a connected client and may be rate limited.</div>
+        </section>
+
+        <section class="panel" style="--delay: 2">
+          <h2>NFT Metadata</h2>
+          <div class="field">
+            <label for="meta-file">Metadata filename</label>
+            <input id="meta-file" type="text" value="xwing-v1.json" />
+          </div>
+          <div class="actions">
+            <button class="ghost" id="meta-apply-uri-btn">Use in Mint URI</button>
+            <button class="ghost" id="meta-preview-btn">Preview JSON</button>
+            <button id="meta-download-btn">Download JSON</button>
+          </div>
+          <div class="field">
+            <label for="meta-item-id">Item id</label>
+            <input id="meta-item-id" type="text" value="xwing-0001" />
+          </div>
+          <div class="field">
+            <label for="meta-name">Name</label>
+            <input id="meta-name" type="text" value="XWing Mk I" />
+          </div>
+          <div class="field">
+            <label for="meta-description">Description</label>
+            <textarea id="meta-description" rows="3">3D printed XWing test asset for XRPL trace demo.</textarea>
+          </div>
+          <div class="field">
+            <label for="meta-image">Image URL</label>
+            <input id="meta-image" type="text" value="https://example.com/xwing.png" />
+          </div>
+          <div class="field">
+            <label for="meta-external-url">External URL (optional)</label>
+            <input id="meta-external-url" type="text" placeholder="https://example.com/xwing-0001" />
+          </div>
+          <div class="field two-col">
+            <div>
+              <label for="meta-serial">Serial</label>
+              <input id="meta-serial" type="text" value="XW-0001" />
+            </div>
+            <div>
+              <label for="meta-material">Material</label>
+              <input id="meta-material" type="text" value="PLA" />
+            </div>
+          </div>
+          <div class="field two-col">
+            <div>
+              <label for="meta-color">Color</label>
+              <input id="meta-color" type="text" value="Graphite" />
+            </div>
+            <div>
+              <label for="meta-facility-country">Facility country</label>
+              <input id="meta-facility-country" type="text" value="FR" />
+            </div>
+          </div>
+          <div class="field two-col">
+            <div>
+              <label for="meta-print-job">Print job id</label>
+              <input id="meta-print-job" type="text" value="print-2024-01" />
+            </div>
+            <div>
+              <label for="meta-machine-id">Machine id</label>
+              <input id="meta-machine-id" type="text" value="mk-03" />
+            </div>
+          </div>
+          <div class="field two-col">
+            <div>
+              <label for="meta-operator-id">Operator id</label>
+              <input id="meta-operator-id" type="text" value="op-17" />
+            </div>
+            <div>
+              <label for="meta-qa-status">QA status</label>
+              <input id="meta-qa-status" type="text" value="passed" />
+            </div>
+          </div>
+          <div class="field two-col">
+            <div>
+              <label for="meta-created-at">Creation date</label>
+              <input id="meta-created-at" type="date" />
+            </div>
+            <div>
+              <label for="meta-version">Metadata version</label>
+              <input id="meta-version" type="text" value="v1" />
+            </div>
+          </div>
+          <div class="field">
+            <label for="meta-extra-attrs">Extra attributes (JSON object or array)</label>
+            <textarea id="meta-extra-attrs" rows="3" placeholder='{"weight_g":120,"scale":"1:144"}'></textarea>
+          </div>
+          <div class="field">
+            <label>Preview</label>
+            <pre class="preview" id="meta-preview"></pre>
+          </div>
+          <div class="hint">Download the JSON into apps/web/metadata/ so the Mint URI resolves.</div>
+        </section>
+
+        <section class="panel" style="--delay: 3">
+          <h2>Mint NFT</h2>
+          <div class="field">
+            <label for="mint-uri">Metadata URI</label>
+            <input id="mint-uri" type="text" value="http://localhost:8000/apps/web/metadata/xwing-v1.json" />
+          </div>
+          <div class="field two-col">
+            <div>
+              <label for="mint-taxon">Taxon</label>
+              <input id="mint-taxon" type="number" value="0" min="0" />
+            </div>
+            <div class="toggle">
+              <label for="mint-transferable">Transferable</label>
+              <input id="mint-transferable" type="checkbox" checked />
+            </div>
+          </div>
+          <div class="actions">
+            <button id="mint-btn">Mint NFT</button>
+          </div>
+          <div class="hint">URI is stored on-ledger as hex. Use a versioned JSON file.</div>
+        </section>
+
+        <section class="panel" style="--delay: 4">
+          <h2>Anchor Trace Event</h2>
+          <div class="field">
+            <label for="event-item-id">Item id</label>
+            <input id="event-item-id" type="text" value="xwing-0001" />
+          </div>
+          <div class="field">
+            <label for="event-type">Event type</label>
+            <select id="event-type">
+              <option value="CREATED">CREATED</option>
+              <option value="PRINT_STARTED">PRINT_STARTED</option>
+              <option value="PRINT_COMPLETED">PRINT_COMPLETED</option>
+              <option value="QA_PASSED">QA_PASSED</option>
+              <option value="QA_FAILED">QA_FAILED</option>
+              <option value="SHIPPED">SHIPPED</option>
+              <option value="DELIVERED">DELIVERED</option>
+              <option value="RETIRED">RETIRED</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="event-payload">Payload (JSON)</label>
+            <textarea id="event-payload" rows="4">{"machine_id":"mk-03","material_lot_id":"pla-77"}</textarea>
+          </div>
+          <div class="field">
+            <label>Payload hash (sha256)</label>
+            <div class="mono" id="event-hash">-</div>
+          </div>
+          <div class="actions">
+            <button id="event-btn">Anchor event</button>
+          </div>
+          <div class="hint">Uses a 1 drop self-payment with a Memo that stores the hash.</div>
+        </section>
+
+        <section class="panel" style="--delay: 5">
+          <h2>Account NFTs</h2>
+          <div class="actions">
+            <button id="nft-refresh-btn">Load NFTs</button>
+          </div>
+          <div class="nft-list" id="nft-list">
+            <div class="empty">No NFTs loaded yet.</div>
+          </div>
+        </section>
+
+        <section class="panel wide" style="--delay: 6">
+          <h2>Activity Log</h2>
+          <pre class="log" id="log"></pre>
+          <div class="hint">Run a local server so Web Crypto and fetch work correctly.</div>
+        </section>
+      </main>
+
+      <footer class="footer">
+        <span>XRPL testnet demo for XWing traceability.</span>
+        <span>Wallet keys stay in your browser.</span>
+      </footer>
+    </div>
+
+    <script src="app.js"></script>
+  </body>
+</html>
