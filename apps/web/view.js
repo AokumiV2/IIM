@@ -15,6 +15,8 @@
   const imageFallback = el("image-fallback");
   const imageCaption = el("image-caption");
   const footerStatus = el("footer-status");
+  const eventList = el("event-list");
+  const eventWarning = el("event-warning");
 
   function setStatus(text) {
     assetStatus.textContent = text;
@@ -49,6 +51,30 @@
 
   function formatKey(key) {
     return String(key).replace(/_/g, " ");
+  }
+
+  function stableStringify(value) {
+    if (value === null || typeof value !== "object") {
+      return JSON.stringify(value);
+    }
+    if (Array.isArray(value)) {
+      return `[${value.map(stableStringify).join(",")}]`;
+    }
+    const keys = Object.keys(value).sort();
+    const entries = keys.map((key) => `${JSON.stringify(key)}:${stableStringify(value[key])}`);
+    return `{${entries.join(",")}}`;
+  }
+
+  async function sha256Hex(input) {
+    const data = new TextEncoder().encode(input);
+    const hash = await crypto.subtle.digest("SHA-256", data);
+    return Array.from(new Uint8Array(hash))
+      .map((b) => b.toString(16).padStart(2, "0"))
+      .join("");
+  }
+
+  async function hashMetadata(metadata) {
+    return sha256Hex(stableStringify(metadata));
   }
 
   function renderKeyValue(container, obj) {
@@ -144,6 +170,76 @@
     return { metadata, sourceUrl: url };
   }
 
+  async function fetchEvents(itemId) {
+    const res = await fetch(`/api/events?id=${encodeURIComponent(itemId)}`, { mode: "cors" });
+    if (!res.ok) {
+      throw new Error(`HTTP ${res.status}`);
+    }
+    const payload = await res.json();
+    return Array.isArray(payload.events) ? payload.events : [];
+  }
+
+  function renderEvents(events, metadataHash) {
+    if (!eventList) {
+      return { verified: null };
+    }
+    eventList.innerHTML = "";
+    eventWarning.classList.add("hidden");
+    if (!Array.isArray(events) || events.length === 0) {
+      const empty = document.createElement("div");
+      empty.className = "event-card";
+      empty.textContent = "No on-chain events found.";
+      eventList.appendChild(empty);
+      return { verified: null };
+    }
+
+    const metadataEvents = events.filter((event) => String(event.event_type || "").startsWith("METADATA_"));
+    const listEvents = metadataEvents.length ? metadataEvents : events;
+
+    listEvents.forEach((event) => {
+      const card = document.createElement("div");
+      card.className = "event-card";
+      const type = document.createElement("div");
+      type.className = "event-type";
+      type.textContent = event.event_type || "EVENT";
+      const meta = document.createElement("div");
+      meta.className = "event-meta";
+      const createdAt = event.created_at ? new Date(event.created_at).toLocaleString() : "unknown time";
+      const tx = event.tx_hash ? `tx ${event.tx_hash}` : "tx pending";
+      const metadataVersion = event.payload_json?.metadata_version
+        ? ` · v${event.payload_json.metadata_version}`
+        : "";
+      meta.textContent = `${createdAt} · ${tx}${metadataVersion}`;
+      card.appendChild(type);
+      card.appendChild(meta);
+      const metadataUrl = event.payload_json?.metadata_url || event.metadata_url || "";
+      if (metadataUrl) {
+        const links = document.createElement("div");
+        links.className = "event-links";
+        const link = document.createElement("a");
+        link.href = metadataUrl;
+        link.target = "_blank";
+        link.rel = "noreferrer";
+        link.textContent = "Metadata JSON";
+        links.appendChild(link);
+        card.appendChild(links);
+      }
+      eventList.appendChild(card);
+    });
+
+    const latestWithHash = listEvents.find((event) => event.payload_json?.metadata_hash);
+    if (!latestWithHash || !metadataHash) {
+      return { verified: null };
+    }
+    const latestHash = latestWithHash.payload_json.metadata_hash;
+    if (latestHash === metadataHash) {
+      return { verified: true };
+    }
+    eventWarning.textContent = "Metadata mismatch: current JSON does not match the last anchored hash.";
+    eventWarning.classList.remove("hidden");
+    return { verified: false };
+  }
+
   async function init() {
     const params = new URLSearchParams(window.location.search);
     const itemId = params.get("id");
@@ -170,12 +266,34 @@
       renderAttributes(attrTags, metadata.attributes);
       showLink(jsonLink, sourceUrl, "Metadata JSON");
       showLink(externalLink, metadata.external_url || "", "External link");
-      setStatus("Metadata loaded.");
+      const metadataHash = await hashMetadata(metadata);
+      let verification = { verified: null };
+      if (itemId) {
+        try {
+          const events = await fetchEvents(itemId);
+          verification = renderEvents(events, metadataHash);
+        } catch (err) {
+          eventWarning.textContent = "Event lookup failed.";
+          eventWarning.classList.remove("hidden");
+        }
+      } else {
+        eventList.textContent = "Events available when using ?id=.";
+      }
+
+      if (verification.verified === true) {
+        setStatus("Metadata verified on-chain.");
+      } else if (verification.verified === false) {
+        setStatus("Metadata mismatch detected.");
+      } else {
+        setStatus("Metadata loaded.");
+      }
     } catch (err) {
       setStatus(`Failed to load metadata: ${err.message || err}`);
       assetDescription.textContent = "Unable to load metadata.";
       clearContainer(traceGrid, "No trace data.");
       clearContainer(attrTags, "No attributes");
+      clearContainer(eventList, "No on-chain events.");
+      eventWarning.classList.add("hidden");
       showLink(jsonLink, "", "Metadata JSON");
       showLink(externalLink, "", "External link");
       renderImage("");

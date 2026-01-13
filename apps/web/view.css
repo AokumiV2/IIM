@@ -211,6 +211,63 @@ h1 {
   color: var(--text);
 }
 
+.event-warning {
+  margin-bottom: 10px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 107, 107, 0.5);
+  background: rgba(255, 107, 107, 0.1);
+  color: #ffd1d1;
+  font-size: 0.85rem;
+}
+
+.event-list {
+  display: grid;
+  gap: 10px;
+}
+
+.event-card {
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(10, 14, 22, 0.7);
+}
+
+.event-type {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  color: var(--accent-2);
+  margin-bottom: 6px;
+}
+
+.event-meta {
+  font-family: var(--mono);
+  font-size: 0.78rem;
+  color: var(--muted);
+  word-break: break-all;
+}
+
+.event-links {
+  margin-top: 6px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.event-links a {
+  color: var(--text);
+  text-decoration: none;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: 0.72rem;
+}
+
+.event-links a:hover {
+  border-color: rgba(45, 212, 191, 0.6);
+}
+
 .links {
   display: flex;
   flex-wrap: wrap;

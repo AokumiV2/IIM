@@ -58,6 +58,8 @@
   const metaExtraAttrs = el("meta-extra-attrs");
   const metaPreview = el("meta-preview");
   const sbFolder = el("sb-folder");
+  const updateItemId = el("update-item-id");
+  const updateBtn = el("update-btn");
 
   const eventItemId = el("event-item-id");
   const eventType = el("event-type");
@@ -100,6 +102,7 @@
     faucetBtn.disabled = !connected || !hasWallet || state.busy;
     balanceBtn.disabled = !connected || !hasWallet || state.busy;
     mintBtn.disabled = !connected || !hasWallet || state.busy;
+    updateBtn.disabled = !connected || !hasWallet || state.busy;
     eventBtn.disabled = !connected || !hasWallet || state.busy;
     nftRefreshBtn.disabled = !connected || !hasWallet || state.busy;
   }
@@ -383,6 +386,9 @@
       mintUri.value = viewerUrl || data.publicUrl;
       if (data.itemId) {
         metaItemId.value = data.itemId;
+        if (updateItemId) {
+          updateItemId.value = data.itemId;
+        }
       }
       if (data.name) {
         metaName.value = data.name;
@@ -397,6 +403,58 @@
       return data;
     } catch (err) {
       log(`Supabase upload failed: ${err.message || err}`, "error");
+      return null;
+    }
+  }
+
+  async function updateMetadataToSupabase(itemId) {
+    if (!itemId) {
+      log("Update failed: item id is required.", "error");
+      return null;
+    }
+    let metadata;
+    try {
+      metadata = buildMetadata(itemId);
+    } catch (err) {
+      const message = err.message || err;
+      metaPreview.textContent = `Error: ${message}`;
+      log(`Metadata error: ${message}`, "error");
+      return null;
+    }
+    const json = JSON.stringify(metadata, null, 2);
+    metaPreview.textContent = json;
+    const folder = sbFolder.value.trim();
+    try {
+      const res = await fetch("/api/update-metadata", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ metadata, itemId, folder }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        const detail = data?.detail ? ` (${JSON.stringify(data.detail)})` : "";
+        throw new Error(`${data?.error || "Supabase update failed"}${detail}`);
+      }
+      if (!data.publicUrl) {
+        log("Update ok but no public URL.", "error");
+        return null;
+      }
+      if (data.itemId) {
+        metaItemId.value = data.itemId;
+        if (updateItemId) {
+          updateItemId.value = data.itemId;
+        }
+      }
+      if (data.name) {
+        metaName.value = data.name;
+      }
+      if (data.metadata) {
+        metaPreview.textContent = JSON.stringify(data.metadata, null, 2);
+      }
+      log(`Supabase update ok: ${data.publicUrl}`);
+      return data;
+    } catch (err) {
+      log(`Supabase update failed: ${err.message || err}`, "error");
       return null;
     }
   }
@@ -437,8 +495,9 @@
     throw new Error("Extra attributes must be a JSON object or array.");
   }
 
-  function buildMetadata() {
+  function buildMetadata(itemIdOverride) {
     const createdAt = metaCreatedAt.value || toDateInputValue(new Date());
+    const resolvedItemId = itemIdOverride ? itemIdOverride.trim() : metaItemId.value.trim();
     const attributes = [];
     pushAttribute(attributes, "serial", metaSerial.value);
     pushAttribute(attributes, "material", metaMaterial.value);
@@ -455,7 +514,7 @@
       description: metaDescription.value.trim() || "",
       attributes,
       trace: {
-        item_id: metaItemId.value.trim(),
+        item_id: resolvedItemId,
         created_at: createdAt,
         facility_country: metaFacilityCountry.value.trim(),
         print_job_id: metaPrintJob.value.trim(),
@@ -546,9 +605,48 @@
       const result = await state.client.submitAndWait(signed.tx_blob);
       log(`Mint submitted: ${result.result.hash}`);
       await refreshBalance();
+      await anchorMetadataChange({
+        itemId: uploadData.itemId,
+        metadata: uploadData.metadata,
+        publicUrl: uploadData.publicUrl,
+        eventType: "METADATA_CREATED",
+      });
       await loadNfts();
     } catch (err) {
       log(`Mint failed: ${err.message || err}`, "error");
+    } finally {
+      state.busy = false;
+      refreshActions();
+    }
+  }
+
+  async function updateMetadata() {
+    if (!state.wallet) {
+      log("No wallet loaded.", "error");
+      return;
+    }
+    const itemId = (updateItemId?.value || "").trim() || metaItemId.value.trim();
+    if (!itemId) {
+      log("Update failed: item id is required.", "error");
+      return;
+    }
+    state.busy = true;
+    refreshActions();
+    try {
+      const updateData = await updateMetadataToSupabase(itemId);
+      if (!updateData || !updateData.publicUrl) {
+        return;
+      }
+      await anchorMetadataChange({
+        itemId: updateData.itemId || itemId,
+        metadata: updateData.metadata,
+        publicUrl: updateData.publicUrl,
+        eventType: "METADATA_UPDATED",
+      });
+      await refreshBalance();
+      await loadNfts();
+    } catch (err) {
+      log(`Metadata update failed: ${err.message || err}`, "error");
     } finally {
       state.busy = false;
       refreshActions();
@@ -575,28 +673,19 @@
       .join("");
   }
 
-  async function anchorEvent() {
-    if (!state.wallet) {
-      log("No wallet loaded.", "error");
-      return;
-    }
-    let payloadObj = {};
-    const payloadText = eventPayload.value.trim();
-    if (payloadText) {
-      try {
-        payloadObj = JSON.parse(payloadText);
-      } catch (err) {
-        log("Payload must be valid JSON.", "error");
-        return;
-      }
-    }
-    const payloadCanonical = stableStringify(payloadObj);
-    const hash = await sha256Hex(payloadCanonical);
-    eventHash.textContent = hash;
+  async function hashMetadata(metadata) {
+    return sha256Hex(stableStringify(metadata));
+  }
 
+  async function submitTraceEvent({ itemId, eventType, payload, payloadHash }) {
+    if (!state.wallet) {
+      throw new Error("No wallet loaded.");
+    }
+    const canonical = stableStringify(payload || {});
+    const hash = payloadHash || (await sha256Hex(canonical));
     const memoData = stableStringify({
-      item_id: eventItemId.value.trim(),
-      event_type: eventType.value,
+      item_id: itemId || "",
+      event_type: eventType,
       payload_hash: hash,
     });
 
@@ -616,13 +705,106 @@
       ],
     };
 
+    const prepared = await state.client.autofill(tx);
+    const signed = state.wallet.sign(prepared);
+    const result = await state.client.submitAndWait(signed.tx_blob);
+    return { txHash: result.result.hash, payloadHash: hash };
+  }
+
+  async function logTraceEvent({ itemId, eventType, payloadHash, payload, txHash }) {
+    try {
+      const res = await fetch("/api/log-event", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          itemId,
+          eventType,
+          payloadHash,
+          payload,
+          txHash,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        const detail = data?.detail ? ` (${JSON.stringify(data.detail)})` : "";
+        log(`Event log failed: ${data?.error || "Unknown error"}${detail}`, "error");
+      }
+    } catch (err) {
+      log(`Event log failed: ${err.message || err}`, "error");
+    }
+  }
+
+  async function anchorMetadataChange({ itemId, metadata, publicUrl, eventType }) {
+    if (!itemId || !metadata) {
+      log("Metadata anchor skipped: missing data.", "error");
+      return null;
+    }
+    try {
+      const metadataHash = await hashMetadata(metadata);
+      const metadataVersion = metadata?.trace?.version || metadata?.version || "";
+      const payload = {
+        metadata_hash: metadataHash,
+        metadata_url: publicUrl,
+        metadata_version: metadataVersion || undefined,
+      };
+      const { txHash, payloadHash } = await submitTraceEvent({
+        itemId,
+        eventType,
+        payload,
+      });
+      await logTraceEvent({
+        itemId,
+        eventType,
+        payloadHash,
+        payload,
+        txHash,
+      });
+      log(`Metadata anchored (${eventType}): ${txHash}`);
+      return { txHash, metadataHash };
+    } catch (err) {
+      log(`Metadata anchor failed: ${err.message || err}`, "error");
+      return null;
+    }
+  }
+
+  async function anchorEvent() {
+    if (!state.wallet) {
+      log("No wallet loaded.", "error");
+      return;
+    }
+    let payloadObj = {};
+    const payloadText = eventPayload.value.trim();
+    if (payloadText) {
+      try {
+        payloadObj = JSON.parse(payloadText);
+      } catch (err) {
+        log("Payload must be valid JSON.", "error");
+        return;
+      }
+    }
+    const payloadCanonical = stableStringify(payloadObj);
+    const hash = await sha256Hex(payloadCanonical);
+    eventHash.textContent = hash;
+
     state.busy = true;
     refreshActions();
     try {
-      const prepared = await state.client.autofill(tx);
-      const signed = state.wallet.sign(prepared);
-      const result = await state.client.submitAndWait(signed.tx_blob);
-      log(`Event anchored: ${result.result.hash}`);
+      const itemId = eventItemId.value.trim();
+      const eventTypeValue = eventType.value;
+      const { txHash } = await submitTraceEvent({
+        itemId,
+        eventType: eventTypeValue,
+        payload: payloadObj,
+        payloadHash: hash,
+      });
+      await logTraceEvent({
+        itemId,
+        eventType: eventTypeValue,
+        payloadHash: hash,
+        payload: payloadObj,
+        txHash,
+      });
+      log(`Event anchored: ${txHash}`);
       await refreshBalance();
     } catch (err) {
       log(`Anchor failed: ${err.message || err}`, "error");
@@ -701,6 +883,7 @@
   faucetBtn.addEventListener("click", fundWallet);
   balanceBtn.addEventListener("click", refreshBalance);
   mintBtn.addEventListener("click", mintNft);
+  updateBtn.addEventListener("click", updateMetadata);
   eventBtn.addEventListener("click", anchorEvent);
   nftRefreshBtn.addEventListener("click", loadNfts);
 
