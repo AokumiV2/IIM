@@ -303,9 +303,10 @@
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ metadata, fileName, folder }),
       });
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        throw new Error(data?.error || "Supabase upload failed");
+        const detail = data?.detail ? ` (${JSON.stringify(data.detail)})` : "";
+        throw new Error(`${data?.error || "Supabase upload failed"}${detail}`);
       }
       if (!data.publicUrl) {
         log("Upload ok but no public URL.", "error");

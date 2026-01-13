@@ -12,6 +12,20 @@ function sendJson(res, status, payload) {
   res.end(JSON.stringify(payload));
 }
 
+function formatError(err) {
+  if (!err) {
+    return { message: "Unknown error" };
+  }
+  const info = { message: err.message || String(err) };
+  if (err.cause && typeof err.cause === "object") {
+    info.cause = {
+      message: err.cause.message || String(err.cause),
+      code: err.cause.code,
+    };
+  }
+  return info;
+}
+
 function sanitizeFileName(input) {
   if (!input) {
     return "";
@@ -68,6 +82,13 @@ export default async function handler(req, res) {
     sendJson(res, 500, { error: "Supabase bucket missing" });
     return;
   }
+  let supabaseHost = "";
+  try {
+    supabaseHost = new URL(SUPABASE_URL).hostname;
+  } catch (err) {
+    sendJson(res, 500, { error: "Supabase URL invalid", detail: formatError(err) });
+    return;
+  }
 
   try {
     let body = req.body;
@@ -90,11 +111,23 @@ export default async function handler(req, res) {
       auth: { persistSession: false },
     });
 
-    const { count, error: countError } = await supabase
-      .from(SUPABASE_TABLE)
-      .select("id", { count: "exact", head: true });
+    let countResult;
+    try {
+      countResult = await supabase.from(SUPABASE_TABLE).select("id", { count: "exact", head: true });
+    } catch (err) {
+      sendJson(res, 500, {
+        error: "Database count request failed",
+        detail: formatError(err),
+        host: supabaseHost,
+      });
+      return;
+    }
+    const { count, error: countError } = countResult;
     if (countError) {
-      sendJson(res, 500, { error: countError.message || "Database count failed" });
+      sendJson(res, 500, {
+        error: countError.message || "Database count failed",
+        host: supabaseHost,
+      });
       return;
     }
 
@@ -118,24 +151,52 @@ export default async function handler(req, res) {
 
     const content = JSON.stringify(storedMetadata, null, 2);
 
-    const { error } = await supabase.storage
-      .from(SUPABASE_BUCKET)
-      .upload(path, Buffer.from(content), { upsert: false, contentType: "application/json" });
+    let uploadResult;
+    try {
+      uploadResult = await supabase.storage
+        .from(SUPABASE_BUCKET)
+        .upload(path, Buffer.from(content), { upsert: false, contentType: "application/json" });
+    } catch (err) {
+      sendJson(res, 500, {
+        error: "Storage upload request failed",
+        detail: formatError(err),
+        host: supabaseHost,
+      });
+      return;
+    }
+    const { error } = uploadResult;
     if (error) {
-      sendJson(res, 500, { error: error.message || "Upload failed" });
+      sendJson(res, 500, {
+        error: error.message || "Upload failed",
+        host: supabaseHost,
+      });
       return;
     }
     const { data } = supabase.storage.from(SUPABASE_BUCKET).getPublicUrl(path);
     const publicUrl = data?.publicUrl || "";
-    const { error: insertError } = await supabase.from(SUPABASE_TABLE).insert({
-      item_id: itemId,
-      name: itemId,
-      metadata_path: path,
-      metadata_url: publicUrl,
-      metadata_json: storedMetadata,
-    });
+    let insertResult;
+    try {
+      insertResult = await supabase.from(SUPABASE_TABLE).insert({
+        item_id: itemId,
+        name: itemId,
+        metadata_path: path,
+        metadata_url: publicUrl,
+        metadata_json: storedMetadata,
+      });
+    } catch (err) {
+      sendJson(res, 500, {
+        error: "Database insert request failed",
+        detail: formatError(err),
+        host: supabaseHost,
+      });
+      return;
+    }
+    const { error: insertError } = insertResult;
     if (insertError) {
-      sendJson(res, 500, { error: insertError.message || "Database insert failed" });
+      sendJson(res, 500, {
+        error: insertError.message || "Database insert failed",
+        host: supabaseHost,
+      });
       return;
     }
     sendJson(res, 200, {
