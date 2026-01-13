@@ -69,55 +69,55 @@ export default async function handler(req, res) {
     return;
   }
 
-  let body = req.body;
-  if (typeof body === "string") {
-    try {
-      body = JSON.parse(body);
-    } catch (err) {
-      sendJson(res, 400, { error: "Invalid JSON body" });
+  try {
+    let body = req.body;
+    if (typeof body === "string") {
+      try {
+        body = JSON.parse(body);
+      } catch (err) {
+        sendJson(res, 400, { error: "Invalid JSON body" });
+        return;
+      }
+    }
+
+    const metadata = body?.metadata;
+    if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) {
+      sendJson(res, 400, { error: "metadata is required" });
       return;
     }
-  }
 
-  const metadata = body?.metadata;
-  if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) {
-    sendJson(res, 400, { error: "metadata is required" });
-    return;
-  }
+    const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
+      auth: { persistSession: false },
+    });
 
-  const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
-    auth: { persistSession: false },
-  });
+    const { count, error: countError } = await supabase
+      .from(SUPABASE_TABLE)
+      .select("id", { count: "exact", head: true });
+    if (countError) {
+      sendJson(res, 500, { error: countError.message || "Database count failed" });
+      return;
+    }
 
-  const { count, error: countError } = await supabase
-    .from(SUPABASE_TABLE)
-    .select("id", { count: "exact", head: true });
-  if (countError) {
-    sendJson(res, 500, { error: countError.message || "Database count failed" });
-    return;
-  }
+    const xwingNumber = (count ?? 0) + 1;
+    const itemId = `xwing${xwingNumber}`;
+    const storedMetadata = {
+      ...metadata,
+      name: itemId,
+      trace: {
+        ...(metadata.trace && typeof metadata.trace === "object" ? metadata.trace : {}),
+        item_id: itemId,
+        sequence: xwingNumber,
+      },
+    };
 
-  const xwingNumber = (count ?? 0) + 1;
-  const itemId = `xwing${xwingNumber}`;
-  const storedMetadata = {
-    ...metadata,
-    name: itemId,
-    trace: {
-      ...(metadata.trace && typeof metadata.trace === "object" ? metadata.trace : {}),
-      item_id: itemId,
-      sequence: xwingNumber,
-    },
-  };
+    const safeFileName = `${itemId}.json`;
+    const clientFolder = sanitizeFolder(body?.folder);
+    const baseFolder = sanitizeFolder(SUPABASE_FOLDER);
+    const fullFolder = [baseFolder, clientFolder].filter(Boolean).join("/");
+    const path = buildPath(safeFileName, fullFolder);
 
-  const safeFileName = `${itemId}.json`;
-  const clientFolder = sanitizeFolder(body?.folder);
-  const baseFolder = sanitizeFolder(SUPABASE_FOLDER);
-  const fullFolder = [baseFolder, clientFolder].filter(Boolean).join("/");
-  const path = buildPath(safeFileName, fullFolder);
+    const content = JSON.stringify(storedMetadata, null, 2);
 
-  const content = JSON.stringify(storedMetadata, null, 2);
-
-  try {
     const { error } = await supabase.storage
       .from(SUPABASE_BUCKET)
       .upload(path, Buffer.from(content), { upsert: false, contentType: "application/json" });
