@@ -2,6 +2,8 @@
   const WS_URL = "wss://s.altnet.rippletest.net:51233";
   const FAUCET_URL = "https://faucet.altnet.rippletest.net/accounts";
   const TRANSFERABLE_FLAG = 0x00000008;
+  const DEFAULT_IMAGE_URL =
+    "https://oqmhriicljlotpojyjky.supabase.co/storage/v1/object/public/xwing%20image%20default/xwing.jpg";
 
   const state = {
     client: null,
@@ -463,7 +465,7 @@
       },
     };
 
-    const image = metaImage.value.trim();
+    const image = metaImage.value.trim() || DEFAULT_IMAGE_URL;
     if (image) {
       metadata.image = image;
     }
