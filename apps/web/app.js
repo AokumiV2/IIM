@@ -36,7 +36,6 @@
   const mintTransferable = el("mint-transferable");
 
   const metaFile = el("meta-file");
-  const metaApplyUriBtn = el("meta-apply-uri-btn");
   const metaPreviewBtn = el("meta-preview-btn");
   const metaDownloadBtn = el("meta-download-btn");
   const metaItemId = el("meta-item-id");
@@ -57,7 +56,6 @@
   const metaExtraAttrs = el("meta-extra-attrs");
   const metaPreview = el("meta-preview");
   const sbFolder = el("sb-folder");
-  const sbUploadBtn = el("sb-upload-btn");
 
   const eventItemId = el("event-item-id");
   const eventType = el("event-type");
@@ -285,28 +283,6 @@
     return new Date(date.getTime() - offsetMs).toISOString().split("T")[0];
   }
 
-  function metadataFileToUri(fileName) {
-    if (!fileName) {
-      return "";
-    }
-    const trimmed = fileName.trim();
-    if (/^https?:\/\//i.test(trimmed)) {
-      return trimmed;
-    }
-    const clean = trimmed.replace(/^\/+/, "").replace(/^metadata\//i, "");
-    return `${window.location.origin}/metadata/${clean}`;
-  }
-
-  function applyMetadataUri() {
-    const fileName = metaFile.value.trim();
-    if (!fileName) {
-      log("Metadata filename missing.", "error");
-      return;
-    }
-    mintUri.value = metadataFileToUri(fileName);
-    log(`Mint URI set to ${mintUri.value}`);
-  }
-
   async function uploadMetadataToSupabase() {
     let metadata;
     try {
@@ -315,13 +291,12 @@
       const message = err.message || err;
       metaPreview.textContent = `Error: ${message}`;
       log(`Metadata error: ${message}`, "error");
-      return;
+      return null;
     }
     const json = JSON.stringify(metadata, null, 2);
     metaPreview.textContent = json;
     const fileName = metaFile.value.trim();
     const folder = sbFolder.value.trim();
-    sbUploadBtn.disabled = true;
     try {
       const res = await fetch("/api/upload-metadata", {
         method: "POST",
@@ -334,7 +309,7 @@
       }
       if (!data.publicUrl) {
         log("Upload ok but no public URL.", "error");
-        return;
+        return null;
       }
       mintUri.value = data.publicUrl;
       if (data.itemId) {
@@ -350,10 +325,10 @@
         metaPreview.textContent = JSON.stringify(data.metadata, null, 2);
       }
       log(`Supabase upload ok: ${data.publicUrl}`);
+      return data;
     } catch (err) {
       log(`Supabase upload failed: ${err.message || err}`, "error");
-    } finally {
-      sbUploadBtn.disabled = false;
+      return null;
     }
   }
 
@@ -476,11 +451,15 @@
       log("No wallet loaded.", "error");
       return;
     }
-    const uri = mintUri.value.trim();
-    if (!uri) {
-      log("Metadata URI missing.", "error");
+    state.busy = true;
+    refreshActions();
+    const uploadData = await uploadMetadataToSupabase();
+    if (!uploadData || !uploadData.publicUrl) {
+      state.busy = false;
+      refreshActions();
       return;
     }
+    const uri = uploadData.publicUrl;
     const taxon = Number(mintTaxon.value || 0);
     const flags = mintTransferable.checked ? TRANSFERABLE_FLAG : 0;
     const tx = {
@@ -491,8 +470,6 @@
       NFTokenTaxon: taxon,
     };
 
-    state.busy = true;
-    refreshActions();
     try {
       const prepared = await state.client.autofill(tx);
       const signed = state.wallet.sign(prepared);
@@ -641,10 +618,8 @@
   disconnectBtn.addEventListener("click", disconnect);
   generateBtn.addEventListener("click", generateWallet);
   loadBtn.addEventListener("click", loadWallet);
-  metaApplyUriBtn.addEventListener("click", applyMetadataUri);
   metaPreviewBtn.addEventListener("click", () => renderMetadataPreview(true));
   metaDownloadBtn.addEventListener("click", downloadMetadata);
-  sbUploadBtn.addEventListener("click", uploadMetadataToSupabase);
   faucetBtn.addEventListener("click", fundWallet);
   balanceBtn.addEventListener("click", refreshBalance);
   mintBtn.addEventListener("click", mintNft);

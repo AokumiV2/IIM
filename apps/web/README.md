@@ -35,4 +35,4 @@ create table if not exists public.xwing_items (
 );
 ```
 - Optional env var: `SUPABASE_TABLE` (default `xwing_items`).
-- Deploy; the UI uses `/api/upload-metadata` to upload and get a public URL.
+- Deploy; Mint will auto-upload via `/api/upload-metadata` and get a public URL.

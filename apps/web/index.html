@@ -71,22 +71,18 @@
 
         <section class="panel" style="--delay: 2">
           <h2>NFT Metadata</h2>
-          <div class="field">
-            <label for="meta-file">Metadata filename</label>
-            <input id="meta-file" type="text" value="xwing-v1.json" />
-          </div>
+          <input id="meta-file" type="hidden" value="" />
           <div class="actions">
-            <button class="ghost" id="meta-apply-uri-btn">Use in Mint URI</button>
             <button class="ghost" id="meta-preview-btn">Preview JSON</button>
             <button id="meta-download-btn">Download JSON</button>
           </div>
           <div class="field">
             <label for="meta-item-id">Item id</label>
-            <input id="meta-item-id" type="text" value="xwing-0001" />
+            <input id="meta-item-id" type="text" value="xwing-0001" readonly />
           </div>
           <div class="field">
             <label for="meta-name">Name</label>
-            <input id="meta-name" type="text" value="XWing Mk I" />
+            <input id="meta-name" type="text" value="XWing Mk I" readonly />
           </div>
           <div class="field">
             <label for="meta-description">Description</label>
@@ -159,23 +155,17 @@
             <label for="sb-folder">Folder (optional)</label>
             <input id="sb-folder" type="text" placeholder="xwings" />
           </div>
-          <div class="actions">
-            <button id="sb-upload-btn">Upload to Supabase</button>
-          </div>
-          <div class="hint">Server-side upload. XWing name is auto-assigned from the database.</div>
+          <div class="hint">Server-side upload happens automatically on mint.</div>
           <div class="field">
             <label>Preview</label>
             <pre class="preview" id="meta-preview"></pre>
           </div>
-          <div class="hint">Download into apps/web/metadata/ or upload to Supabase, then mint with the public URL.</div>
+          <div class="hint">Download JSON for your records; mint auto-uploads to Supabase.</div>
         </section>
 
         <section class="panel" style="--delay: 3">
           <h2>Mint NFT</h2>
-          <div class="field">
-            <label for="mint-uri">Metadata URI</label>
-            <input id="mint-uri" type="text" value="https://iim-one.vercel.app/xwing-v1.json" />
-          </div>
+          <input id="mint-uri" type="hidden" value="" />
           <div class="field two-col">
             <div>
               <label for="mint-taxon">Taxon</label>
