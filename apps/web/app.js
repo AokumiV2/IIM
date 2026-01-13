@@ -56,6 +56,8 @@
   const metaVersion = el("meta-version");
   const metaExtraAttrs = el("meta-extra-attrs");
   const metaPreview = el("meta-preview");
+  const sbFolder = el("sb-folder");
+  const sbUploadBtn = el("sb-upload-btn");
 
   const eventItemId = el("event-item-id");
   const eventType = el("event-type");
@@ -284,7 +286,15 @@
   }
 
   function metadataFileToUri(fileName) {
-    return fileName ? `https://iim-one.vercel.app/${fileName}` : "";
+    if (!fileName) {
+      return "";
+    }
+    const trimmed = fileName.trim();
+    if (/^https?:\/\//i.test(trimmed)) {
+      return trimmed;
+    }
+    const clean = trimmed.replace(/^\/+/, "").replace(/^metadata\//i, "");
+    return `${window.location.origin}/metadata/${clean}`;
   }
 
   function applyMetadataUri() {
@@ -295,6 +305,56 @@
     }
     mintUri.value = metadataFileToUri(fileName);
     log(`Mint URI set to ${mintUri.value}`);
+  }
+
+  async function uploadMetadataToSupabase() {
+    let metadata;
+    try {
+      metadata = buildMetadata();
+    } catch (err) {
+      const message = err.message || err;
+      metaPreview.textContent = `Error: ${message}`;
+      log(`Metadata error: ${message}`, "error");
+      return;
+    }
+    const json = JSON.stringify(metadata, null, 2);
+    metaPreview.textContent = json;
+    const fileName = metaFile.value.trim();
+    const folder = sbFolder.value.trim();
+    sbUploadBtn.disabled = true;
+    try {
+      const res = await fetch("/api/upload-metadata", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ metadata, fileName, folder }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data?.error || "Supabase upload failed");
+      }
+      if (!data.publicUrl) {
+        log("Upload ok but no public URL.", "error");
+        return;
+      }
+      mintUri.value = data.publicUrl;
+      if (data.itemId) {
+        metaItemId.value = data.itemId;
+      }
+      if (data.name) {
+        metaName.value = data.name;
+      }
+      if (data.fileName) {
+        metaFile.value = data.fileName;
+      }
+      if (data.metadata) {
+        metaPreview.textContent = JSON.stringify(data.metadata, null, 2);
+      }
+      log(`Supabase upload ok: ${data.publicUrl}`);
+    } catch (err) {
+      log(`Supabase upload failed: ${err.message || err}`, "error");
+    } finally {
+      sbUploadBtn.disabled = false;
+    }
   }
 
   function isEmpty(value) {
@@ -584,6 +644,7 @@
   metaApplyUriBtn.addEventListener("click", applyMetadataUri);
   metaPreviewBtn.addEventListener("click", () => renderMetadataPreview(true));
   metaDownloadBtn.addEventListener("click", downloadMetadata);
+  sbUploadBtn.addEventListener("click", uploadMetadataToSupabase);
   faucetBtn.addEventListener("click", fundWallet);
   balanceBtn.addEventListener("click", refreshBalance);
   mintBtn.addEventListener("click", mintNft);

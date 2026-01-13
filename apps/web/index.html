@@ -154,11 +154,20 @@
             <label for="meta-extra-attrs">Extra attributes (JSON object or array)</label>
             <textarea id="meta-extra-attrs" rows="3" placeholder='{"weight_g":120,"scale":"1:144"}'></textarea>
           </div>
+          <div class="label">Supabase Storage</div>
+          <div class="field">
+            <label for="sb-folder">Folder (optional)</label>
+            <input id="sb-folder" type="text" placeholder="xwings" />
+          </div>
+          <div class="actions">
+            <button id="sb-upload-btn">Upload to Supabase</button>
+          </div>
+          <div class="hint">Server-side upload. XWing name is auto-assigned from the database.</div>
           <div class="field">
             <label>Preview</label>
             <pre class="preview" id="meta-preview"></pre>
           </div>
-          <div class="hint">Download the JSON into apps/web/metadata/ so the Mint URI resolves.</div>
+          <div class="hint">Download into apps/web/metadata/ or upload to Supabase, then mint with the public URL.</div>
         </section>
 
         <section class="panel" style="--delay: 3">
