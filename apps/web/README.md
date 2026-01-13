@@ -8,7 +8,9 @@ Demo (XRPL testnet)
 - Open `apps/web/index.html` via a local static server.
 - Example: `python -m http.server 8000` from `apps/web`.
 - Browse to `http://localhost:8000` and use the UI to connect, fund a wallet, mint NFTs, and anchor trace events.
-- Use the "NFT Metadata" panel to generate JSON and download it into `apps/web/metadata/`, then apply it to the Mint URI.
+- Mint auto-uploads metadata to Supabase and stores a viewer URL on-ledger.
+- Open `view.html?id=xwing1` to see the public metadata view.
+- You can also use `view.html?url=https://...json` for a direct JSON link.
 
 Notes
 - Testnet only. Use disposable keys.
@@ -35,4 +37,5 @@ create table if not exists public.xwing_items (
 );
 ```
 - Optional env var: `SUPABASE_TABLE` (default `xwing_items`).
-- Deploy; Mint will auto-upload via `/api/upload-metadata` and get a public URL.
+- Deploy; Mint will auto-upload via `/api/upload-metadata`.
+- `view.html` calls `/api/metadata?id=...` to render the public page.

@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>XWing Trace Viewer</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="view.css" />
+  </head>
+  <body>
+    <div class="noise"></div>
+    <div class="page">
+      <header class="topbar">
+        <div>
+          <p class="kicker">XRPL trace viewer</p>
+          <h1 id="asset-title">XWing Trace</h1>
+          <p class="subtitle" id="asset-subtitle">Metadata view for minted assets.</p>
+        </div>
+        <div class="badges">
+          <span class="badge" id="asset-id">item id</span>
+          <span class="badge muted" id="asset-status">Loading metadata...</span>
+        </div>
+      </header>
+
+      <main class="viewer">
+        <section class="media">
+          <div class="image-frame is-empty" id="image-frame">
+            <img id="asset-image" alt="Asset preview" />
+            <div class="image-fallback" id="image-fallback">No image available</div>
+          </div>
+          <div class="image-caption" id="image-caption"></div>
+        </section>
+
+        <section class="details">
+          <div class="section">
+            <h2>Description</h2>
+            <p id="asset-description">Loading description...</p>
+          </div>
+          <div class="section">
+            <h2>Trace data</h2>
+            <div class="kv-grid" id="trace-grid"></div>
+          </div>
+          <div class="section">
+            <h2>Attributes</h2>
+            <div class="tag-grid" id="attr-tags"></div>
+          </div>
+          <div class="section links">
+            <a id="json-link" class="link hidden" href="#" target="_blank" rel="noreferrer">Metadata JSON</a>
+            <a id="external-link" class="link hidden" href="#" target="_blank" rel="noreferrer">External link</a>
+          </div>
+        </section>
+      </main>
+
+      <footer class="footer">
+        <span>XRPL XWing Trace Lab</span>
+        <span id="footer-status"></span>
+      </footer>
+    </div>
+
+    <script src="view.js"></script>
+  </body>
+</html>

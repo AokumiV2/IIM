@@ -240,6 +240,61 @@
       .replace(/'/g, "&#39;");
   }
 
+  function buildViewerUrl(itemId, origin) {
+    if (!itemId) {
+      return "";
+    }
+    try {
+      const base = origin || window.location.origin;
+      const url = new URL("view.html", base);
+      url.searchParams.set("id", itemId);
+      return url.toString();
+    } catch (err) {
+      return "";
+    }
+  }
+
+  function extractViewerId(uri) {
+    if (!uri) {
+      return null;
+    }
+    try {
+      const url = new URL(uri);
+      if (!/\/view\.html$/i.test(url.pathname)) {
+        return null;
+      }
+      const id = url.searchParams.get("id");
+      return id ? id.trim() : null;
+    } catch (err) {
+      return null;
+    }
+  }
+
+  async function fetchMetadataById(itemId, origin) {
+    if (!itemId) {
+      return { error: "Missing item id", viewer: true };
+    }
+    try {
+      const endpoint = new URL("/api/metadata", origin || window.location.origin);
+      endpoint.searchParams.set("id", itemId);
+      const res = await fetch(endpoint.toString(), { mode: "cors" });
+      if (!res.ok) {
+        return { error: `HTTP ${res.status}`, viewer: true };
+      }
+      const payload = await res.json();
+      if (!payload?.metadata) {
+        return { error: "Metadata missing", viewer: true };
+      }
+      return {
+        data: payload.metadata,
+        sourceUrl: payload.metadata_url || payload.metadataUrl || payload.publicUrl || "",
+        viewer: true,
+      };
+    } catch (err) {
+      return { error: err.message || String(err), viewer: true };
+    }
+  }
+
   async function fetchMetadata(uri) {
     if (!uri) {
       return { error: "Missing URI" };
@@ -247,13 +302,23 @@
     if (!/^https?:\/\//i.test(uri)) {
       return { error: "Unsupported URI scheme" };
     }
+    const viewerId = extractViewerId(uri);
+    if (viewerId) {
+      let origin;
+      try {
+        origin = new URL(uri).origin;
+      } catch (err) {
+        origin = window.location.origin;
+      }
+      return fetchMetadataById(viewerId, origin);
+    }
     try {
       const res = await fetch(uri, { mode: "cors" });
       if (!res.ok) {
         return { error: `HTTP ${res.status}` };
       }
       const data = await res.json();
-      return { data };
+      return { data, sourceUrl: uri, viewer: false };
     } catch (err) {
       return { error: err.message || String(err) };
     }
@@ -312,7 +377,8 @@
         log("Upload ok but no public URL.", "error");
         return null;
       }
-      mintUri.value = data.publicUrl;
+      const viewerUrl = buildViewerUrl(data.itemId);
+      mintUri.value = viewerUrl || data.publicUrl;
       if (data.itemId) {
         metaItemId.value = data.itemId;
       }
@@ -460,7 +526,8 @@
       refreshActions();
       return;
     }
-    const uri = uploadData.publicUrl;
+    const viewerUrl = buildViewerUrl(uploadData.itemId);
+    const uri = viewerUrl || uploadData.publicUrl;
     const taxon = Number(mintTaxon.value || 0);
     const flags = mintTransferable.checked ? TRANSFERABLE_FLAG : 0;
     const tx = {
@@ -594,9 +661,17 @@
           const metaImage = metaData?.image ? escapeHtml(metaData.image) : "";
           const metaError = meta.error ? escapeHtml(meta.error) : "";
           const attributesHtml = metaData?.attributes ? renderAttributeTags(metaData.attributes) : "";
+          const uriLabel = meta.viewer ? "Open viewer" : "Metadata URI";
+          const uriLink = uri
+            ? `<a class="nft-link" href="${escapeHtml(uri)}" target="_blank" rel="noreferrer">${uriLabel}</a>`
+            : "no uri";
+          const sourceUrl =
+            meta.sourceUrl && meta.sourceUrl !== uri
+              ? `<a class="nft-link" href="${escapeHtml(meta.sourceUrl)}" target="_blank" rel="noreferrer">Metadata JSON</a>`
+              : "";
           return `<div class="nft-item">
             <div class="mono">${escapeHtml(nft.NFTokenID)}</div>
-            <div class="hint">${uri ? escapeHtml(uri) : "no uri"}</div>
+            <div class="hint">${uriLink}${sourceUrl ? ` · ${sourceUrl}` : ""}</div>
             ${
               metaData
                 ? `<div class="nft-meta">

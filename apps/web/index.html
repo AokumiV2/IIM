@@ -78,11 +78,11 @@
           </div>
           <div class="field">
             <label for="meta-item-id">Item id</label>
-            <input id="meta-item-id" type="text" value="xwing-0001" readonly />
+            <input id="meta-item-id" type="text" value="" placeholder="auto" readonly />
           </div>
           <div class="field">
             <label for="meta-name">Name</label>
-            <input id="meta-name" type="text" value="XWing Mk I" readonly />
+            <input id="meta-name" type="text" value="" placeholder="auto" readonly />
           </div>
           <div class="field">
             <label for="meta-description">Description</label>
@@ -155,7 +155,7 @@
             <label for="sb-folder">Folder (optional)</label>
             <input id="sb-folder" type="text" placeholder="xwings" />
           </div>
-          <div class="hint">Server-side upload happens automatically on mint.</div>
+          <div class="hint">Supabase assigns item id/name and uploads automatically on mint.</div>
           <div class="field">
             <label>Preview</label>
             <pre class="preview" id="meta-preview"></pre>
@@ -179,7 +179,7 @@
           <div class="actions">
             <button id="mint-btn">Mint NFT</button>
           </div>
-          <div class="hint">URI is stored on-ledger as hex. Use a versioned JSON file.</div>
+          <div class="hint">URI is stored on-ledger as hex. Mint points to view.html?id=...</div>
         </section>
 
         <section class="panel" style="--delay: 4">

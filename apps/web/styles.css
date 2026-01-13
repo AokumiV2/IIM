@@ -295,6 +295,15 @@ button:not(:disabled):hover {
   font-size: 0.85rem;
 }
 
+a.nft-link {
+  text-decoration: none;
+}
+
+a.nft-link:hover {
+  color: var(--accent-2);
+  text-decoration: underline;
+}
+
 .nft-attrs {
   display: flex;
   flex-wrap: wrap;
