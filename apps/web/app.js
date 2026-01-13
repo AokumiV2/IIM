@@ -231,13 +231,60 @@
     return value;
   }
 
+  function escapeHtml(value) {
+    return String(value)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/\"/g, "&quot;")
+      .replace(/'/g, "&#39;");
+  }
+
+  async function fetchMetadata(uri) {
+    if (!uri) {
+      return { error: "Missing URI" };
+    }
+    if (!/^https?:\/\//i.test(uri)) {
+      return { error: "Unsupported URI scheme" };
+    }
+    try {
+      const res = await fetch(uri, { mode: "cors" });
+      if (!res.ok) {
+        return { error: `HTTP ${res.status}` };
+      }
+      const data = await res.json();
+      return { data };
+    } catch (err) {
+      return { error: err.message || String(err) };
+    }
+  }
+
+  function renderAttributeTags(attributes) {
+    if (!Array.isArray(attributes) || attributes.length === 0) {
+      return "";
+    }
+    const visible = attributes.slice(0, 6);
+    const items = visible
+      .map((attr) => {
+        const key = escapeHtml(attr.trait_type || "attr");
+        const value = escapeHtml(attr.value ?? "");
+        return `<span class="nft-attr">${key}: ${value}</span>`;
+      })
+      .join("");
+    const extra =
+      attributes.length > visible.length
+        ? `<span class="nft-attr">+${attributes.length - visible.length} more</span>`
+        : "";
+    return `<div class="nft-attrs">${items}${extra}</div>`;
+  }
+
   function toDateInputValue(date) {
     const offsetMs = date.getTimezoneOffset() * 60000;
     return new Date(date.getTime() - offsetMs).toISOString().split("T")[0];
   }
 
   function metadataFileToUri(fileName) {
-    return fileName ? `http://localhost:8000/apps/web/metadata/${fileName}` : "";
+    return fileName ? `https://iim-one.vercel.app/${fileName}` : "";
   }
 
   function applyMetadataUri() {
@@ -392,6 +439,7 @@
       const result = await state.client.submitAndWait(signed.tx_blob);
       log(`Mint submitted: ${result.result.hash}`);
       await refreshBalance();
+      await loadNfts();
     } catch (err) {
       log(`Mint failed: ${err.message || err}`, "error");
     } finally {
@@ -492,10 +540,36 @@
         nftList.innerHTML = "<div class=\"empty\">No NFTs found.</div>";
         return;
       }
-      nftList.innerHTML = nfts
-        .map((nft) => {
+      nftList.innerHTML = `<div class="empty">Loading ${nfts.length} NFTs...</div>`;
+      const enriched = await Promise.all(
+        nfts.map(async (nft) => {
           const uri = nft.URI ? fromHex(nft.URI) : "";
-          return `<div class=\"nft-item\"><div class=\"mono\">${nft.NFTokenID}</div><div class=\"hint\">${uri || "no uri"}</div></div>`;
+          const meta = await fetchMetadata(uri);
+          return { nft, uri, meta };
+        })
+      );
+      nftList.innerHTML = enriched
+        .map(({ nft, uri, meta }) => {
+          const metaData = meta.data;
+          const metaName = metaData?.name ? escapeHtml(metaData.name) : "Unnamed";
+          const metaDesc = metaData?.description ? escapeHtml(metaData.description) : "";
+          const metaImage = metaData?.image ? escapeHtml(metaData.image) : "";
+          const metaError = meta.error ? escapeHtml(meta.error) : "";
+          const attributesHtml = metaData?.attributes ? renderAttributeTags(metaData.attributes) : "";
+          return `<div class="nft-item">
+            <div class="mono">${escapeHtml(nft.NFTokenID)}</div>
+            <div class="hint">${uri ? escapeHtml(uri) : "no uri"}</div>
+            ${
+              metaData
+                ? `<div class="nft-meta">
+                    <div class="nft-title">${metaName}</div>
+                    ${metaDesc ? `<div class="nft-desc">${metaDesc}</div>` : ""}
+                    ${metaImage ? `<div class="nft-link">${metaImage}</div>` : ""}
+                    ${attributesHtml}
+                  </div>`
+                : `<div class="hint">Metadata: ${metaError || "not available"}</div>`
+            }
+          </div>`;
         })
         .join("");
     } catch (err) {

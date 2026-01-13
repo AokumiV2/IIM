@@ -273,6 +273,37 @@ button:not(:disabled):hover {
   font-size: 0.78rem;
 }
 
+.nft-meta {
+  margin-top: 10px;
+  display: grid;
+  gap: 6px;
+}
+
+.nft-title {
+  font-weight: 600;
+}
+
+.nft-desc,
+.nft-link {
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.nft-attrs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.nft-attr {
+  font-size: 0.75rem;
+  padding: 4px 8px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(9, 12, 18, 0.6);
+  color: var(--text);
+}
+
 .empty {
   color: var(--muted);
   font-size: 0.9rem;
