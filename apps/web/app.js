@@ -705,10 +705,25 @@
       ],
     };
 
-    const prepared = await state.client.autofill(tx);
-    const signed = state.wallet.sign(prepared);
-    const result = await state.client.submitAndWait(signed.tx_blob);
-    return { txHash: result.result.hash, payloadHash: hash };
+    let lastError;
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      const prepared = await state.client.autofill(tx, { maxLedgerVersionOffset: 120 });
+      if (prepared.LastLedgerSequence) {
+        prepared.LastLedgerSequence += 4;
+      }
+      const signed = state.wallet.sign(prepared);
+      try {
+        const result = await state.client.submitAndWait(signed.tx_blob);
+        return { txHash: result.result.hash, payloadHash: hash };
+      } catch (err) {
+        lastError = err;
+        const message = err?.message || String(err);
+        if (!/LastLedgerSequence|temREDUNDANT|tefMAX_LEDGER/i.test(message)) {
+          break;
+        }
+      }
+    }
+    throw lastError || new Error("Trace event submit failed.");
   }
 
   async function logTraceEvent({ itemId, eventType, payloadHash, payload, txHash }) {
