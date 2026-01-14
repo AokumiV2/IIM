@@ -5,11 +5,13 @@
   const DEFAULT_IMAGE_URL =
     "https://oqmhriicljlotpojyjky.supabase.co/storage/v1/object/public/xwing%20image%20default/xwing.jpg";
   const TX_TIMEOUT_MS = 45000;
+  const PENDING_ANCHOR_KEY = "xwingPendingAnchor";
 
   const state = {
     client: null,
     wallet: null,
     busy: false,
+    pendingAnchor: null,
   };
 
   const el = (id) => document.getElementById(id);
@@ -61,6 +63,7 @@
   const sbFolder = el("sb-folder");
   const updateItemId = el("update-item-id");
   const updateBtn = el("update-btn");
+  const retryAnchorBtn = el("retry-anchor-btn");
 
   const eventItemId = el("event-item-id");
   const eventType = el("event-type");
@@ -104,6 +107,7 @@
     balanceBtn.disabled = !connected || !hasWallet || state.busy;
     mintBtn.disabled = !connected || !hasWallet || state.busy;
     updateBtn.disabled = !connected || !hasWallet || state.busy;
+    retryAnchorBtn.disabled = !connected || !hasWallet || state.busy || !state.pendingAnchor;
     eventBtn.disabled = !connected || !hasWallet || state.busy;
     nftRefreshBtn.disabled = !connected || !hasWallet || state.busy;
   }
@@ -254,6 +258,41 @@
       }, ms);
     });
     return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+  }
+
+  function loadPendingAnchor() {
+    try {
+      const raw = localStorage.getItem(PENDING_ANCHOR_KEY);
+      if (!raw) {
+        return null;
+      }
+      const data = JSON.parse(raw);
+      if (!data || typeof data !== "object") {
+        return null;
+      }
+      return data;
+    } catch (err) {
+      return null;
+    }
+  }
+
+  function savePendingAnchor(payload) {
+    if (!payload) {
+      return;
+    }
+    try {
+      localStorage.setItem(PENDING_ANCHOR_KEY, JSON.stringify(payload));
+    } catch (err) {
+      // ignore storage errors
+    }
+    state.pendingAnchor = payload;
+    refreshActions();
+  }
+
+  function clearPendingAnchor() {
+    localStorage.removeItem(PENDING_ANCHOR_KEY);
+    state.pendingAnchor = null;
+    refreshActions();
   }
 
   function buildViewerUrl(itemId, origin) {
@@ -592,6 +631,7 @@
     }
     state.busy = true;
     refreshActions();
+    let released = false;
     const uploadData = await uploadMetadataToSupabase();
     if (!uploadData || !uploadData.publicUrl) {
       state.busy = false;
@@ -620,13 +660,18 @@
       );
       log(`Mint submitted: ${result.result.hash}`);
       await refreshBalance();
-      await anchorMetadataChange({
+      const anchorPayload = {
         itemId: uploadData.itemId,
         metadata: uploadData.metadata,
         publicUrl: uploadData.publicUrl,
         eventType: "METADATA_CREATED",
-      });
-      await loadNfts();
+      };
+      const loadPromise = loadNfts();
+      state.busy = false;
+      released = true;
+      refreshActions();
+      void anchorMetadataChange(anchorPayload);
+      await loadPromise;
     } catch (err) {
       const message = err.message || err;
       if (/timed out/i.test(message)) {
@@ -635,8 +680,10 @@
         log(`Mint failed: ${message}`, "error");
       }
     } finally {
-      state.busy = false;
-      refreshActions();
+      if (!released) {
+        state.busy = false;
+        refreshActions();
+      }
     }
   }
 
@@ -652,21 +699,54 @@
     }
     state.busy = true;
     refreshActions();
+    let released = false;
     try {
       const updateData = await updateMetadataToSupabase(itemId);
       if (!updateData || !updateData.publicUrl) {
         return;
       }
-      await anchorMetadataChange({
+      const anchorPayload = {
         itemId: updateData.itemId || itemId,
         metadata: updateData.metadata,
         publicUrl: updateData.publicUrl,
         eventType: "METADATA_UPDATED",
-      });
+      };
+      const loadPromise = loadNfts();
       await refreshBalance();
-      await loadNfts();
+      state.busy = false;
+      released = true;
+      refreshActions();
+      void anchorMetadataChange(anchorPayload);
+      await loadPromise;
     } catch (err) {
       log(`Metadata update failed: ${err.message || err}`, "error");
+    } finally {
+      if (!released) {
+        state.busy = false;
+        refreshActions();
+      }
+    }
+  }
+
+  async function retryLastAnchor() {
+    const pending = state.pendingAnchor || loadPendingAnchor();
+    if (!pending) {
+      log("No pending anchor to retry.", "error");
+      return;
+    }
+    if (!state.wallet) {
+      log("No wallet loaded.", "error");
+      return;
+    }
+    state.busy = true;
+    refreshActions();
+    try {
+      const result = await anchorMetadataChange(pending);
+      if (result && !result.pending) {
+        clearPendingAnchor();
+      }
+    } catch (err) {
+      log(`Retry anchor failed: ${err.message || err}`, "error");
     } finally {
       state.busy = false;
       refreshActions();
@@ -695,6 +775,18 @@
 
   async function hashMetadata(metadata) {
     return sha256Hex(stableStringify(metadata));
+  }
+
+  async function checkTxValidated(txHash) {
+    if (!txHash) {
+      return false;
+    }
+    try {
+      const res = await state.client.request({ command: "tx", transaction: txHash });
+      return !!res?.result?.validated;
+    } catch (err) {
+      return false;
+    }
   }
 
   async function submitTraceEvent({ itemId, eventType, payload, payloadHash }) {
@@ -740,16 +832,24 @@
         }
       }
       const signed = state.wallet.sign(prepared);
+      const txHash = signed.hash;
       try {
         const result = await withTimeout(
           state.client.submitAndWait(signed.tx_blob),
           TX_TIMEOUT_MS,
           "Trace event"
         );
-        return { txHash: result.result.hash, payloadHash: hash };
+        return { txHash: result.result.hash || txHash, payloadHash: hash };
       } catch (err) {
         lastError = err;
         const message = err?.message || String(err);
+        if (/timed out/i.test(message)) {
+          const validated = await checkTxValidated(txHash);
+          if (validated) {
+            return { txHash, payloadHash: hash };
+          }
+          return { txHash, payloadHash: hash, pending: true };
+        }
         if (!/LastLedgerSequence|temREDUNDANT|tefMAX_LEDGER/i.test(message)) {
           break;
         }
@@ -794,11 +894,17 @@
         metadata_url: publicUrl,
         metadata_version: metadataVersion || undefined,
       };
-      const { txHash, payloadHash } = await submitTraceEvent({
+      const traceResult = await submitTraceEvent({
         itemId,
         eventType,
         payload,
       });
+      if (traceResult.pending) {
+        savePendingAnchor({ itemId, eventType, metadata, publicUrl });
+        log(`Metadata anchor pending: ${traceResult.txHash}. Retry when ready.`);
+        return { txHash: traceResult.txHash, metadataHash, pending: true };
+      }
+      const { txHash, payloadHash } = traceResult;
       await logTraceEvent({
         itemId,
         eventType,
@@ -806,12 +912,16 @@
         payload,
         txHash,
       });
+      if (state.pendingAnchor?.itemId === itemId && state.pendingAnchor?.eventType === eventType) {
+        clearPendingAnchor();
+      }
       log(`Metadata anchored (${eventType}): ${txHash}`);
       return { txHash, metadataHash };
     } catch (err) {
       const message = err.message || err;
+      savePendingAnchor({ itemId, eventType, metadata, publicUrl });
       if (/timed out/i.test(message)) {
-        log("Metadata anchor timed out. You can retry anchor later.", "error");
+        log("Metadata anchor timed out. Retry when ready.", "error");
       } else {
         log(`Metadata anchor failed: ${message}`, "error");
       }
@@ -912,7 +1022,7 @@
               : "";
           return `<div class="nft-item">
             <div class="mono">${escapeHtml(nft.NFTokenID)}</div>
-            <div class="hint">${uriLink}${sourceUrl ? ` · ${sourceUrl}` : ""}</div>
+            <div class="hint">${uriLink}${sourceUrl ? ` - ${sourceUrl}` : ""}</div>
             ${
               metaData
                 ? `<div class="nft-meta">
@@ -941,6 +1051,7 @@
   balanceBtn.addEventListener("click", refreshBalance);
   mintBtn.addEventListener("click", mintNft);
   updateBtn.addEventListener("click", updateMetadata);
+  retryAnchorBtn.addEventListener("click", retryLastAnchor);
   eventBtn.addEventListener("click", anchorEvent);
   nftRefreshBtn.addEventListener("click", loadNfts);
 
@@ -948,6 +1059,10 @@
     el("net-url").textContent = WS_URL;
     if (metaCreatedAt && !metaCreatedAt.value) {
       metaCreatedAt.value = toDateInputValue(new Date());
+    }
+    state.pendingAnchor = loadPendingAnchor();
+    if (state.pendingAnchor?.itemId) {
+      log(`Pending anchor loaded for ${state.pendingAnchor.itemId}.`);
     }
     renderMetadataPreview(false);
     refreshActions();
