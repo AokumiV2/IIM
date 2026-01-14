@@ -4,6 +4,7 @@
   const TRANSFERABLE_FLAG = 0x00000008;
   const DEFAULT_IMAGE_URL =
     "https://oqmhriicljlotpojyjky.supabase.co/storage/v1/object/public/xwing%20image%20default/xwing.jpg";
+  const TX_TIMEOUT_MS = 45000;
 
   const state = {
     client: null,
@@ -243,6 +244,16 @@
       .replace(/>/g, "&gt;")
       .replace(/\"/g, "&quot;")
       .replace(/'/g, "&#39;");
+  }
+
+  function withTimeout(promise, ms, label) {
+    let timer;
+    const timeout = new Promise((_, reject) => {
+      timer = setTimeout(() => {
+        reject(new Error(`${label || "Operation"} timed out after ${ms}ms`));
+      }, ms);
+    });
+    return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
   }
 
   function buildViewerUrl(itemId, origin) {
@@ -602,7 +613,11 @@
     try {
       const prepared = await state.client.autofill(tx);
       const signed = state.wallet.sign(prepared);
-      const result = await state.client.submitAndWait(signed.tx_blob);
+      const result = await withTimeout(
+        state.client.submitAndWait(signed.tx_blob),
+        TX_TIMEOUT_MS,
+        "Mint"
+      );
       log(`Mint submitted: ${result.result.hash}`);
       await refreshBalance();
       await anchorMetadataChange({
@@ -613,7 +628,12 @@
       });
       await loadNfts();
     } catch (err) {
-      log(`Mint failed: ${err.message || err}`, "error");
+      const message = err.message || err;
+      if (/timed out/i.test(message)) {
+        log("Mint timed out waiting for validation. Check Load NFTs or the explorer.", "error");
+      } else {
+        log(`Mint failed: ${message}`, "error");
+      }
     } finally {
       state.busy = false;
       refreshActions();
@@ -721,7 +741,11 @@
       }
       const signed = state.wallet.sign(prepared);
       try {
-        const result = await state.client.submitAndWait(signed.tx_blob);
+        const result = await withTimeout(
+          state.client.submitAndWait(signed.tx_blob),
+          TX_TIMEOUT_MS,
+          "Trace event"
+        );
         return { txHash: result.result.hash, payloadHash: hash };
       } catch (err) {
         lastError = err;
@@ -785,7 +809,12 @@
       log(`Metadata anchored (${eventType}): ${txHash}`);
       return { txHash, metadataHash };
     } catch (err) {
-      log(`Metadata anchor failed: ${err.message || err}`, "error");
+      const message = err.message || err;
+      if (/timed out/i.test(message)) {
+        log("Metadata anchor timed out. You can retry anchor later.", "error");
+      } else {
+        log(`Metadata anchor failed: ${message}`, "error");
+      }
       return null;
     }
   }
@@ -830,7 +859,12 @@
       log(`Event anchored: ${txHash}`);
       await refreshBalance();
     } catch (err) {
-      log(`Anchor failed: ${err.message || err}`, "error");
+      const message = err.message || err;
+      if (/timed out/i.test(message)) {
+        log("Anchor timed out. Try again in a few seconds.", "error");
+      } else {
+        log(`Anchor failed: ${message}`, "error");
+      }
     } finally {
       state.busy = false;
       refreshActions();
