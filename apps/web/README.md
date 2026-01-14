@@ -13,6 +13,7 @@ Demo (XRPL testnet)
 - You can also use `view.html?url=https://...json` for a direct JSON link.
 - Use "Update metadata" to upload a new JSON version and anchor `METADATA_UPDATED`.
 - Use "Retry last anchor" if an anchor timed out; it reuses the last pending payload stored in the browser.
+- "Anchor trace event" validates that the item exists in `xwing_items` before submitting on-chain.
 
 Notes
 - Testnet only. Use disposable keys.

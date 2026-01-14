@@ -65,7 +65,7 @@
   const updateBtn = el("update-btn");
   const retryAnchorBtn = el("retry-anchor-btn");
 
-  const eventItemId = el("event-item-id");
+  const eventItemSelect = el("event-item-select");
   const eventType = el("event-type");
   const eventPayload = el("event-payload");
   const eventHash = el("event-hash");
@@ -396,6 +396,51 @@
         ? `<span class="nft-attr">+${attributes.length - visible.length} more</span>`
         : "";
     return `<div class="nft-attrs">${items}${extra}</div>`;
+  }
+
+  function populateEventItemSelect(enriched) {
+    if (!eventItemSelect) {
+      return;
+    }
+    const previous = eventItemSelect.value;
+    const options = new Map();
+    enriched.forEach(({ nft, meta }) => {
+      const metaData = meta.data;
+      const itemId = metaData?.trace?.item_id || metaData?.name;
+      if (!itemId || options.has(itemId)) {
+        return;
+      }
+      const tokenId = nft?.NFTokenID ? nft.NFTokenID.slice(0, 8) : "";
+      const label = tokenId ? `${itemId} - ${tokenId}...` : itemId;
+      options.set(itemId, label);
+    });
+
+    eventItemSelect.innerHTML = "";
+    if (options.size === 0) {
+      const emptyOption = document.createElement("option");
+      emptyOption.value = "";
+      emptyOption.textContent = "No traceable NFTs found";
+      eventItemSelect.appendChild(emptyOption);
+      eventItemSelect.disabled = true;
+      return;
+    }
+
+    const placeholder = document.createElement("option");
+    placeholder.value = "";
+    placeholder.textContent = "Select an item";
+    eventItemSelect.appendChild(placeholder);
+
+    options.forEach((label, itemId) => {
+      const option = document.createElement("option");
+      option.value = itemId;
+      option.textContent = label;
+      eventItemSelect.appendChild(option);
+    });
+
+    eventItemSelect.disabled = false;
+    if (previous && options.has(previous)) {
+      eventItemSelect.value = previous;
+    }
   }
 
   function toDateInputValue(date) {
@@ -777,6 +822,25 @@
     return sha256Hex(stableStringify(metadata));
   }
 
+  async function checkItemExists(itemId) {
+    if (!itemId) {
+      return false;
+    }
+    try {
+      const endpoint = new URL("/api/item-exists", window.location.origin);
+      endpoint.searchParams.set("id", itemId);
+      const res = await fetch(endpoint.toString(), { mode: "cors" });
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}`);
+      }
+      const payload = await res.json();
+      return !!payload?.exists;
+    } catch (err) {
+      log(`Item check failed: ${err.message || err}`, "error");
+      return false;
+    }
+  }
+
   async function checkTxValidated(txHash) {
     if (!txHash) {
       return false;
@@ -934,6 +998,16 @@
       log("No wallet loaded.", "error");
       return;
     }
+    const itemId = eventItemSelect.value.trim();
+    if (!itemId) {
+      log("Select an item from your wallet first.", "error");
+      return;
+    }
+    const exists = await checkItemExists(itemId);
+    if (!exists) {
+      log(`Item not found in database: ${itemId}`, "error");
+      return;
+    }
     let payloadObj = {};
     const payloadText = eventPayload.value.trim();
     if (payloadText) {
@@ -951,18 +1025,22 @@
     state.busy = true;
     refreshActions();
     try {
-      const itemId = eventItemId.value.trim();
       const eventTypeValue = eventType.value;
-      const { txHash } = await submitTraceEvent({
+      const traceResult = await submitTraceEvent({
         itemId,
         eventType: eventTypeValue,
         payload: payloadObj,
         payloadHash: hash,
       });
+      if (traceResult.pending) {
+        log(`Event anchor pending: ${traceResult.txHash}. Check explorer or retry later.`, "error");
+        return;
+      }
+      const { txHash, payloadHash } = traceResult;
       await logTraceEvent({
         itemId,
         eventType: eventTypeValue,
-        payloadHash: hash,
+        payloadHash: payloadHash || hash,
         payload: payloadObj,
         txHash,
       });
@@ -994,6 +1072,7 @@
       const nfts = result.result.account_nfts || [];
       if (!nfts.length) {
         nftList.innerHTML = "<div class=\"empty\">No NFTs found.</div>";
+        populateEventItemSelect([]);
         return;
       }
       nftList.innerHTML = `<div class="empty">Loading ${nfts.length} NFTs...</div>`;
@@ -1004,6 +1083,7 @@
           return { nft, uri, meta };
         })
       );
+      populateEventItemSelect(enriched);
       nftList.innerHTML = enriched
         .map(({ nft, uri, meta }) => {
           const metaData = meta.data;
@@ -1063,6 +1143,9 @@
     state.pendingAnchor = loadPendingAnchor();
     if (state.pendingAnchor?.itemId) {
       log(`Pending anchor loaded for ${state.pendingAnchor.itemId}.`);
+    }
+    if (eventItemSelect) {
+      eventItemSelect.disabled = true;
     }
     renderMetadataPreview(false);
     refreshActions();
