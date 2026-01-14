@@ -708,8 +708,16 @@
     let lastError;
     for (let attempt = 0; attempt < 2; attempt += 1) {
       const prepared = await state.client.autofill(tx, { maxLedgerVersionOffset: 300 });
-      if (prepared.LastLedgerSequence) {
-        prepared.LastLedgerSequence += 4;
+      try {
+        const ledger = await state.client.request({ command: "ledger_current" });
+        const current = Number(ledger?.result?.ledger_current_index);
+        if (Number.isFinite(current)) {
+          prepared.LastLedgerSequence = current + 300;
+        }
+      } catch (err) {
+        if (prepared.LastLedgerSequence) {
+          prepared.LastLedgerSequence += 4;
+        }
       }
       const signed = state.wallet.sign(prepared);
       try {
