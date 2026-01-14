@@ -707,7 +707,7 @@
 
     let lastError;
     for (let attempt = 0; attempt < 2; attempt += 1) {
-      const prepared = await state.client.autofill(tx, { maxLedgerVersionOffset: 120 });
+      const prepared = await state.client.autofill(tx, { maxLedgerVersionOffset: 300 });
       if (prepared.LastLedgerSequence) {
         prepared.LastLedgerSequence += 4;
       }
