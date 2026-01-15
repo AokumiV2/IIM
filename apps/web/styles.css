@@ -179,6 +179,10 @@ h1 {
   align-items: center;
 }
 
+.field.two-col > * {
+  min-width: 0;
+}
+
 input,
 textarea,
 select {
@@ -189,6 +193,19 @@ select {
   border-radius: 12px;
   padding: 10px 12px;
   outline: none;
+}
+
+input[type="text"],
+input[type="number"],
+input[type="date"],
+input[type="password"],
+input[type="url"],
+input[type="email"],
+textarea,
+select {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
 }
 
 input:focus,
